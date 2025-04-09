@@ -1,16 +1,16 @@
-﻿using Newtonsoft.Json;
-using osu.Framework.Graphics.Rendering;
+﻿using osu.Framework.Graphics.Rendering;
 using osu.Framework.Graphics.Textures;
 using osu.Framework.Logging;
+using osu.Game.Online.API;
 using SixLabors.ImageSharp.PixelFormats;
 using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace osu.Game.Rulesets.RurusettoAddon.API;
 
-public class RurusettoAPI : Component {
+public partial class RurusettoAPI : Component {
 	private HttpClient client = new();
-	public const string DefaultAPIAddress = "https://rulesets.info/api/";
+	public const string DefaultAPIAddress = "https://rulesets.info/api";
 	public readonly Bindable<string> Address = new( DefaultAPIAddress );
 	public Uri GetEndpoint ( string endpoint ) => new( new Uri( Address.Value ), endpoint );
 
@@ -67,9 +67,16 @@ public class RurusettoAPI : Component {
 
 		queue( listingCache ??= requestRulesetListing(), success, failure, cancelled );
 	}
+
+	// mobile doesnt have HttpClient.GetStringAsync
+	private static async Task<T> JsonWebRequest<T>(string apiPath) {
+		var req = new OsuJsonWebRequest<T>(DefaultAPIAddress + apiPath);
+		await req.PerformAsync();
+		return req.ResponseObject;
+	}
+
 	private async Task<IEnumerable<ListingEntry>?> requestRulesetListing () {
-		var raw = await client.GetStringAsync( GetEndpoint( "/api/rulesets" ) );
-		return JsonConvert.DeserializeObject<List<ListingEntry>>( raw );
+		return await JsonWebRequest<List<ListingEntry>>("/rulesets");
 	}
 	public void FlushRulesetListingCache () {
 		listingCache = null;
@@ -86,8 +93,7 @@ public class RurusettoAPI : Component {
 		queue( detail, success, failure );
 	}
 	private async Task<RulesetDetail?> requestRulesetDetail ( string slug ) {
-		var raw = await client.GetStringAsync( GetEndpoint( $"/api/rulesets/{slug}" ) );
-		return JsonConvert.DeserializeObject<RulesetDetail>( raw );
+		return await JsonWebRequest<RulesetDetail?>($"/rulesets/{slug}");
 	}
 	public void FlushRulesetDetailCache ( string shortName ) {
 		rulesetDetailCache.Remove( shortName );
@@ -107,8 +113,7 @@ public class RurusettoAPI : Component {
 		queue( listing, success, failure );
 	}
 	private async Task<IEnumerable<SubpageListingEntry>?> requestSubpageListing ( string slug ) {
-		var raw = await client.GetStringAsync( GetEndpoint( $"/api/subpage/{slug}" ) );
-		return JsonConvert.DeserializeObject<List<SubpageListingEntry>>( raw );
+		return await JsonWebRequest<List<SubpageListingEntry>>($"/subpage/{slug}");
 	}
 	public void FlushSubpageListingCache ( string shortName ) {
 		subpageListingCache.Remove( shortName );
@@ -128,8 +133,7 @@ public class RurusettoAPI : Component {
 		queue( listing, success, failure );
 	}
 	private async Task<Subpage?> requestSubpage ( string rulesetSlug, string subpageSlug ) {
-		var raw = await client.GetStringAsync( GetEndpoint( $"/api/subpage/{rulesetSlug}/{subpageSlug}" ) );
-		return JsonConvert.DeserializeObject<Subpage>( raw );
+		return await JsonWebRequest<Subpage>($"/subpage/{rulesetSlug}/{subpageSlug}");
 	}
 	public void FlushSubpageCache ( string rulesetSlug, string subpageSlug ) {
 		subpageCache.Remove( $"{rulesetSlug}/{subpageSlug}" );
@@ -159,14 +163,12 @@ public class RurusettoAPI : Component {
 		queue( list, success, failure );
 	}
 	private async Task<List<BeatmapRecommendation>?> requestBeatmapRecommendations ( string rulesetSlug, RecommendationSource source ) {
-		var url = $"/api/rulesets/{rulesetSlug}/beatmaps";
+		var apiPath = $"/rulesets/{rulesetSlug}/beatmaps";
 		if ( source is RecommendationSource.Author )
-			url += "/creator";
+			apiPath += "/creator";
 		else if ( source is RecommendationSource.Users )
-			url += "/players";
-
-		var raw = await client.GetStringAsync( GetEndpoint( url ) );
-		return JsonConvert.DeserializeObject<List<BeatmapRecommendation>>( raw );
+			apiPath += "/players";
+		return await JsonWebRequest<List<BeatmapRecommendation>>(apiPath);
 	}
 	public void FlushBeatmapRecommendationsCache ( string rulesetSlug, RecommendationSource source ) {
 		recommmendationCache.Remove( (rulesetSlug, source) );
@@ -191,8 +193,7 @@ public class RurusettoAPI : Component {
 		queue( user, success, failure );
 	}
 	private async Task<UserProfile?> requestUserProfile ( int id ) {
-		var raw = await client.GetStringAsync( GetEndpoint( $"/api/profile/{id}" ) );
-		return JsonConvert.DeserializeObject<UserProfile>( raw );
+		return await JsonWebRequest<UserProfile>($"/profile/{id}");
 	}
 	public void FlushUserProfileCache ( int id ) {
 		userCache.Remove( id );
@@ -216,7 +217,8 @@ public class RurusettoAPI : Component {
 			throw new InvalidOperationException( $"Images can only be requested from `/media/` and `/static/` endpoints, but `{uri}` was requested." );
 
 		var imageStream = await client.GetStreamAsync( GetEndpoint( uri ) );
-		var image = await Image.LoadAsync<Rgba32>( imageStream );
+		// mobile dotnet doesn't have Image.LoadAsync
+		var image = await Task.Run(() => Image.Load<Rgba32>(imageStream));
 
 		var texture = renderer.CreateTexture( image.Width, image.Height );
 		texture.SetData( new TextureUpload( image ) );

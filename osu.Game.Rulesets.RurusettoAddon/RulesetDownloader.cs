@@ -57,10 +57,10 @@ namespace osu.Game.Rulesets.RurusettoAddon {
 					if ( File.Exists( ruleset.LocalPath ) ) {
 						var info = new FileInfo( ruleset.LocalPath );
 						info.Refresh();
-
+						using var stream = File.OpenRead(ruleset.LocalPath);
 						if ( s.LatestUpdate.HasValue && info.LastWriteTimeUtc < s.LatestUpdate.Value )
 							availability.Value |= Availability.Outdated;
-						else if ( s.FileSize != 0 && info.Length != s.FileSize )
+						else if ( s.FileSize != 0 && stream.Length != s.FileSize )
 							availability.Value |= Availability.Outdated;
 					}
 				}
@@ -91,7 +91,7 @@ namespace osu.Game.Rulesets.RurusettoAddon {
 
 				var filename = $"./rurusetto-addon-temp/{detail.GithubFilename}";
 				if ( !storage.Exists( filename ) ) {
-					using var data = await new HttpClient().GetStreamAsync( detail.Download );
+					using var data = await new HttpClient().GetStreamAsync( new Uri(detail.Download) );
 					if ( wasTaskCancelled( ruleset, task ) ) return;
 
 					using var file = storage.GetStream( filename, FileAccess.Write, FileMode.OpenOrCreate );
