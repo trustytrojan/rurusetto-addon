@@ -69,8 +69,8 @@ public partial class RurusettoAPI : Component {
 	}
 
 	// mobile doesnt have HttpClient.GetStringAsync
-	private static async Task<T> JsonWebRequest<T>(string apiPath) {
-		var req = new OsuJsonWebRequest<T>(DefaultAPIAddress + apiPath);
+	private async Task<T> JsonWebRequest<T>(string apiPath) {
+		var req = new OsuJsonWebRequest<T>(GetEndpoint(apiPath).AbsoluteUri);
 		await req.PerformAsync();
 		return req.ResponseObject;
 	}
